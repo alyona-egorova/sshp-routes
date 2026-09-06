@@ -25,6 +25,20 @@ button,a{touch-action:manipulation}
 .bar h1 small{display:block;font-size:12px;font-weight:500;color:var(--green60)}
 .bar a{margin-left:auto;font-weight:700;font-size:14px;color:var(--green);text-decoration:none}
 .filters{position:sticky;top:0;z-index:5;background:var(--cream);padding:8px 16px 8px;display:flex;flex-direction:column;gap:6px;box-shadow:0 4px 6px -1px rgba(0,0,0,.08),0 2px 4px -2px rgba(0,0,0,.08)}
+.tools{display:flex;gap:6px}
+.search{flex:1;min-width:0;position:relative;display:flex;align-items:center}
+.search svg{position:absolute;left:12px;width:18px;height:18px;pointer-events:none;color:var(--green60)}
+.search input{width:100%;min-height:44px;border:1px solid var(--green);background:#fff;color:var(--green);font:inherit;font-size:16px;padding:0 12px 0 38px;-webkit-appearance:none;appearance:none;border-radius:0}
+.search input::placeholder{color:var(--green60)}
+.search input:focus{outline:2px solid var(--pink);outline-offset:1px}
+.search input::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none;width:14px;height:14px;cursor:pointer;background:var(--green60);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M18 6L6 18M6 6l12 12' stroke='black' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M18 6L6 18M6 6l12 12' stroke='black' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E") center/contain no-repeat}
+#toggle{flex:0 0 auto;min-height:44px;border:1px solid var(--green);background:transparent;color:var(--green);font:inherit;font-weight:700;font-size:15px;padding:0 12px;cursor:pointer;display:flex;align-items:center;gap:6px}
+#toggle .n{background:var(--pink);color:var(--green);font-size:12px;min-width:20px;height:20px;border-radius:10px;display:none;align-items:center;justify-content:center;padding:0 6px}
+#toggle .n.on{display:inline-flex}
+#toggle svg{width:16px;height:16px;transition:transform .2s}
+#toggle[aria-expanded="false"] svg{transform:rotate(-90deg)}
+#panel{display:flex;flex-direction:column;gap:6px}
+#panel[hidden]{display:none}
 .row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 #dist{grid-template-columns:repeat(3,1fr)}
 #dir .f:last-child{grid-column:span 2}
@@ -60,8 +74,14 @@ ol{list-style:none;padding:6px 16px 0}
   <a href="https://saddlesisters.ca/">saddlesisters.ca</a>
 </div>
 <div class="filters">
-  <div class="row" id="dir" role="group" aria-label="Direction from Toronto (City of Toronto = stays in the city)"></div>
-  <div class="row" id="dist" role="group" aria-label="Distance"></div>
+  <div class="tools">
+    <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="q" type="search" placeholder="Search route names" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Search route names"></label>
+    <button id="toggle" type="button" aria-expanded="true" aria-controls="panel">Filters <span class="n" id="nfilt"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+  </div>
+  <div id="panel">
+    <div class="row" id="dir" role="group" aria-label="Direction from Toronto (City of Toronto = stays in the city)"></div>
+    <div class="row" id="dist" role="group" aria-label="Distance"></div>
+  </div>
 </div>
 <div class="status"><span id="count"></span><button id="clear" type="button" hidden>Clear filters</button><button id="sort" type="button"></button></div>
 <ol id="list"></ol>
@@ -84,21 +104,30 @@ const GROUP={W:"West",SW:"West",NW:"North-West",N:"North",NE:"North-East",E:"Eas
 let R=window.ROUTES||[];
 const DIRS=[["West","W"],["North-West","NW"],["North","N"],["North-East","NE"],["East","E"],["South","S"],["Local","Toronto"]];
 const DISTS=[["<50","Under 50 km",r=>r.k<50],["50-100","50–100 km",r=>r.k>=50&&r.k<=100],[">100","Over 100 km",r=>r.k>100]];
-const S={dir:new Set(),dist:new Set(),asc:true};
+const S={dir:new Set(),dist:new Set(),q:"",asc:true};
 function build(id,items,key){const box=document.getElementById(id);for(const [val,label] of items){const b=document.createElement("button");b.type="button";b.className="f";b.textContent=label;b.setAttribute("aria-pressed","false");b.onclick=()=>{S[key].has(val)?S[key].delete(val):S[key].add(val);b.setAttribute("aria-pressed",S[key].has(val));draw();};box.appendChild(b);}}
 build("dir",DIRS,"dir");build("dist",DISTS,"dist");
 const sortBtn=document.getElementById("sort");sortBtn.onclick=()=>{S.asc=!S.asc;draw();};
-const clearBtn=document.getElementById("clear");clearBtn.onclick=()=>{S.dir.clear();S.dist.clear();document.querySelectorAll(".f").forEach(b=>b.setAttribute("aria-pressed","false"));draw();};
+const clearBtn=document.getElementById("clear");clearBtn.onclick=()=>{S.dir.clear();S.dist.clear();S.q="";qIn.value="";document.querySelectorAll(".f").forEach(b=>b.setAttribute("aria-pressed","false"));draw();};
+const qIn=document.getElementById("q");let qT;qIn.oninput=()=>{clearTimeout(qT);qT=setTimeout(()=>{S.q=qIn.value.trim();draw();},120);};
+qIn.onkeydown=e=>{if(e.key==="Enter")qIn.blur();};
+const panel=document.getElementById("panel"),tog=document.getElementById("toggle");
+tog.onclick=()=>{const open=panel.hidden;panel.hidden=!open;tog.setAttribute("aria-expanded",String(open));};
 (function(){const p=new URLSearchParams(location.hash.slice(1));
   for(const [key,id] of [["dir","dir"],["dist","dist"]]){const vals=(p.get(key)||"").split(",").filter(Boolean);const btns=[...document.getElementById(id).children];
     const items=key==="dir"?DIRS:DISTS;items.forEach(([val],i)=>{if(vals.includes(val)){S[key].add(val);btns[i].setAttribute("aria-pressed","true");}});}
-  if(p.get("sort")==="desc")S.asc=false;})();
+  if(p.get("sort")==="desc")S.asc=false;
+  if(p.get("q")){S.q=p.get("q");qIn.value=S.q;}
+  if(S.dir.size||S.dist.size){panel.hidden=true;tog.setAttribute("aria-expanded","false");}})();
 const short=Object.fromEntries(DIRS);
 function draw(){
-  const rows=R.filter(r=>(!S.dir.size||S.dir.has(r.d))&&(!S.dist.size||DISTS.some(d=>S.dist.has(d[0])&&d[2](r)))).sort((a,b)=>S.asc?a.k-b.k:b.k-a.k);
+  const norm=s=>s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const q=norm(S.q);
+  const rows=R.filter(r=>(!S.dir.size||S.dir.has(r.d))&&(!S.dist.size||DISTS.some(d=>S.dist.has(d[0])&&d[2](r)))&&(!q||norm(r.n).includes(q))).sort((a,b)=>S.asc?a.k-b.k:b.k-a.k);
   document.getElementById("count").textContent=rows.length+" routes";
-  clearBtn.hidden=!(S.dir.size||S.dist.size);
-  const p=new URLSearchParams();if(S.dir.size)p.set("dir",[...S.dir].join(","));if(S.dist.size)p.set("dist",[...S.dist].join(","));if(!S.asc)p.set("sort","desc");
+  clearBtn.hidden=!(S.dir.size||S.dist.size||S.q);
+  const nf=S.dir.size+S.dist.size;const badge=document.getElementById("nfilt");badge.textContent=nf;badge.classList.toggle("on",nf>0);
+  const p=new URLSearchParams();if(S.dir.size)p.set("dir",[...S.dir].join(","));if(S.dist.size)p.set("dist",[...S.dist].join(","));if(!S.asc)p.set("sort","desc");if(S.q)p.set("q",S.q);
   history.replaceState(null,"",p.toString()?"#"+p.toString():location.pathname+location.search);
   sortBtn.textContent=S.asc?"Shortest first":"Longest first";
   const ol=document.getElementById("list");ol.innerHTML="";
