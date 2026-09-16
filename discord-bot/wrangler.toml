@@ -1,0 +1,7 @@
+name = "sshp-routes"
+main = "worker.js"
+compatibility_date = "2026-06-01"
+
+[vars]
+# Optional: link to the full web page, shown in the results footer
+BOARD_URL = ""
