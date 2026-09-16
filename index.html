@@ -52,7 +52,13 @@ button,a{touch-action:manipulation}
 .sheet .btns button{flex:1;min-height:46px;border:1px solid var(--green);font:inherit;font-weight:700;font-size:15px;cursor:pointer;background:transparent;color:var(--green)}
 .sheet .btns .go{background:var(--green);color:var(--cream);border-color:transparent}
 .sheet .btns button:disabled{opacity:.5;cursor:default}
+#addform{display:flex;flex-direction:column;gap:10px}
+#addok{display:flex;flex-direction:column;gap:3px;border-left:3px solid var(--pink);padding-left:10px}
+#addok .okname{font-weight:700;font-size:16px;line-height:1.3}
+#addok .okmeta{font-size:13px;color:var(--green60)}
+#addform[hidden],#addok[hidden],.sheet .btns[hidden]{display:none}
 #addmsg{font-size:14px;line-height:1.4;min-height:1.4em}
+#addmsg:empty{min-height:0}
 #addmsg.err{color:#9b2c2c}
 #addmsg.ok{color:var(--green);font-weight:500}
 @media (min-width:700px){.sheet{max-width:520px;left:50%;transform:translateX(-50%);border:1px solid var(--green);bottom:auto;top:20vh}.fab{right:calc(50% - 340px + 16px)}}
@@ -81,6 +87,9 @@ ol{list-style:none;padding:6px 16px 0}
 .el{font-size:13px;font-weight:400;color:var(--green60);white-space:nowrap;font-variant-numeric:tabular-nums}
 .el b{color:var(--green);font-weight:700}
 .dr{font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;background:var(--pink);color:var(--green);padding:3px 6px;line-height:1.3;text-align:center;max-width:72px}
+.r.flash{animation:flash 1.8s ease-out}
+@keyframes flash{0%,35%{background-color:var(--pink)}100%{background-color:transparent}}
+@media (prefers-reduced-motion:reduce){.r.flash{animation:none;background-color:var(--pink)}}
 .none{padding:40px 16px;text-align:center;color:var(--green60)}
 .foot{padding:24px 16px 0;font-size:13px;color:var(--green60);text-align:center}
 @media (min-width:700px){body{max-width:680px;margin:0 auto}}
@@ -109,11 +118,15 @@ ol{list-style:none;padding:6px 16px 0}
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="addbox" role="dialog" aria-modal="true" aria-labelledby="addh">
   <h2 id="addh">Add a route</h2>
-  <p>Paste a Strava route link. Name, distance, elevation and direction are filled in from Strava. The route must be public.</p>
-  <input id="addurl" type="url" inputmode="url" placeholder="https://www.strava.com/routes/…" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Strava route link">
-  <input id="addkey" type="password" placeholder="Club password" autocomplete="off" aria-label="Club password" hidden>
+  <div id="addform">
+    <p>Paste a Strava route link. Name, distance, elevation and direction are filled in from Strava. The route must be public.</p>
+    <input id="addurl" type="url" inputmode="url" placeholder="https://www.strava.com/routes/…" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Strava route link">
+    <input id="addkey" type="password" placeholder="Club password" autocomplete="off" aria-label="Club password" hidden>
+  </div>
+  <div id="addok" role="status" hidden><span class="okname"></span><span class="okmeta"></span></div>
   <div id="addmsg" aria-live="polite"></div>
-  <div class="btns"><button type="button" id="addcancel">Cancel</button><button type="button" class="go" id="addgo">Add route</button></div>
+  <div class="btns" id="addbtns"><button type="button" id="addcancel">Cancel</button><button type="button" class="go" id="addgo">Add route</button></div>
+  <div class="btns" id="donebtns" hidden><button type="button" class="go" id="adddone">Done</button></div>
 </div>
 <p class="foot"><span id="src">Showing the built-in copy of the route list</span><br>Direction is where the ride goes, not where it starts; City of Toronto routes stay within the city. Tap a route to open it in Strava.</p>
 <script>
@@ -150,11 +163,26 @@ const panel=document.getElementById("panel"),tog=document.getElementById("toggle
 const addBtn=document.getElementById("add"),addBox=document.getElementById("addbox"),addUrl=document.getElementById("addurl"),addKey=document.getElementById("addkey"),addMsg=document.getElementById("addmsg"),addGo=document.getElementById("addgo");
 if(ADD_ENDPOINT){addBtn.classList.add("on");addKey.hidden=!ADD_NEEDS_KEY;}
 const scrim=document.getElementById("scrim");
-function openAdd(){addBox.classList.add("open");scrim.classList.add("open");addMsg.textContent="";addMsg.className="";setTimeout(()=>addUrl.focus(),50);}
-function closeAdd(){addBox.classList.remove("open");scrim.classList.remove("open");addUrl.value="";addMsg.textContent="";addMsg.className="";}
+const addForm=document.getElementById("addform"),addOk=document.getElementById("addok"),addBtns=document.getElementById("addbtns"),doneBtns=document.getElementById("donebtns"),addH=document.getElementById("addh");
+let lastAdded="";
+// Back to the empty form: used when opening, closing, and on "Add another".
+function resetAdd(){addH.textContent="Add a route";addForm.hidden=false;addBtns.hidden=false;addOk.hidden=true;doneBtns.hidden=true;addMsg.textContent="";addMsg.className="";}
+function openAdd(){resetAdd();addBox.classList.add("open");scrim.classList.add("open");setTimeout(()=>addUrl.focus(),50);}
+function closeAdd(){addBox.classList.remove("open");scrim.classList.remove("open");addUrl.value="";resetAdd();}
+// Show where the route landed on the board, so "added" is something you can see.
+function revealAdded(){
+  if(!lastAdded)return;
+  const a=[...document.querySelectorAll("#list a.r")].find(x=>x.getAttribute("href")===lastAdded);
+  lastAdded="";
+  if(!a)return;
+  const still=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  a.scrollIntoView({block:"center",behavior:still?"auto":"smooth"});
+  a.classList.add("flash");setTimeout(()=>a.classList.remove("flash"),1800);
+}
 scrim.onclick=closeAdd;document.addEventListener("keydown",e=>{if(e.key==="Escape")closeAdd();});
 addBtn.onclick=openAdd;
 document.getElementById("addcancel").onclick=closeAdd;
+document.getElementById("adddone").onclick=()=>{const r=lastAdded;closeAdd();lastAdded=r;revealAdded();};
 addUrl.onkeydown=e=>{if(e.key==="Enter")addGo.click();};
 addKey.onkeydown=e=>{if(e.key==="Enter")addGo.click();};
 addGo.onclick=async()=>{
@@ -169,8 +197,12 @@ addGo.onclick=async()=>{
     const out=await res.json();
     if(!out.ok)throw new Error(out.error||"Something went wrong.");
     const r=out.route;r.d=GROUP[r.d]||r.d;R=[r,...R];draw();
-    addMsg.textContent="Added: "+r.n+" — "+r.k+" km, "+r.e+" m, "+(r.d==="Local"?"City of Toronto":r.d)+".";addMsg.className="ok";
-    addUrl.value="";
+    lastAdded=r.u;addUrl.value="";addMsg.textContent="";addMsg.className="";
+    addH.textContent="Added to the board";
+    addOk.querySelector(".okname").textContent=r.n;
+    addOk.querySelector(".okmeta").textContent=(Number.isInteger(r.k)?r.k:r.k.toFixed(1))+" km · Elevation gain "+r.e+" m · "+(r.d==="Local"?"City of Toronto":r.d);
+    addForm.hidden=true;addBtns.hidden=true;addOk.hidden=false;doneBtns.hidden=false;
+    document.getElementById("adddone").focus();
   }catch(e){addMsg.textContent=e.message==="Failed to fetch"?"Couldn't reach the server. Check your connection and try again.":e.message;addMsg.className="err";}
   finally{addGo.disabled=false;}
 };
