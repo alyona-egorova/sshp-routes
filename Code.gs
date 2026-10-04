@@ -13,6 +13,8 @@
  *      ADD_KEY               a simple club password people type when adding
  *                            (leave it out entirely to allow anyone with the page URL)
  *      SHEET_NAME            optional; the tab name. Defaults to the first tab.
+ *      TOKEN_KEY             optional; long random secret for the Strava→Discord events
+ *                            worker (?action=token). Never reuse ADD_KEY for this.
  *
  * 3. Strava authorisation (once). In a browser, open this URL with your client id:
  *      https://www.strava.com/oauth/authorize?client_id=YOUR_ID&redirect_uri=http://localhost&response_type=code&scope=read
@@ -54,9 +56,31 @@ function doPost(e) {
 }
 
 function doGet(e) {
+  var params = (e && e.parameter) || {};
+  if (params.action === "token") return json_(tokenForWorker_(String(params.key || "")));
   // Handy health check: open the web app URL in a browser.
-  return ContentService.createTextOutput(JSON.stringify({ ok: true, routes: sheet_().getLastRow() - 1 }))
-    .setMimeType(ContentService.MimeType.JSON);
+  return json_({ ok: true, routes: sheet_().getLastRow() - 1 });
+}
+
+// Hands a valid Strava access token to the Discord events worker, so this script stays
+// the ONLY place that ever refreshes (refresh tokens rotate; two refreshers break each other).
+// Protected by TOKEN_KEY — a separate secret, never the club ADD_KEY.
+function tokenForWorker_(key) {
+  var expected = PropertiesService.getScriptProperties().getProperty("TOKEN_KEY");
+  if (!expected || key !== expected) return { ok: false, error: "unauthorized" };
+  var lock = LockService.getScriptLock(); // same lock addRoute holds, so refreshes never overlap
+  lock.waitLock(20000);
+  try {
+    var token = accessToken_();
+    var exp = Number(PropertiesService.getScriptProperties().getProperty("STRAVA_EXPIRES_AT") || 0);
+    return { ok: true, access_token: token, expires_at: exp };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function json_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
 // ---------- core ----------
